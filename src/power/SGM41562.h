@@ -4,6 +4,7 @@
 
 #ifdef HAS_SGM41562
 
+#include "SGM41562Regs.h"
 #include <Wire.h>
 #include <stdint.h>
 
@@ -64,6 +65,14 @@ class SGM41562
     bool setChargeEnable(bool enable);
     bool setShippingModeEnable(bool enable);
 
+    // Lower the charge-voltage regulation target, to cap the battery below a full charge. Refuses
+    // anything that would raise it, anything outside SGM41562Regs' verified range, and any part whose
+    // REG04 reset value does not match the family we detected. A request at or above
+    // SGM41562Regs::MAX_TARGET_MV means "keep the hardware default" and issues no write at all.
+    bool setChargeTargetVoltage(uint16_t millivolts);
+    /// The target we programmed, or 0 if the hardware default is still in force.
+    uint16_t chargeTargetVoltage() const { return chargeTargetMv_; }
+
   private:
     TwoWire *wire_ = nullptr;
     uint8_t address_ = SGM41562_ADDR;
@@ -74,6 +83,20 @@ class SGM41562
     bool thermalReg_ = false;
     uint8_t faultMask_ = 0;
     ChipType chipType_ = ChipType::Unknown;
+
+    // REG04 as the silicon booted with it, sampled in begin() immediately after resetRegisters() and
+    // before chip detection. 0 = not sampled, which makes setChargeTargetVoltage() fail closed.
+    uint8_t reg04Default_ = 0;
+    uint8_t reg04Target_ = 0;     // the byte we programmed; 0 = we have never written REG04
+    uint16_t chargeTargetMv_ = 0; // decoded form of reg04Target_; 0 = hardware default in force
+    uint32_t lastTargetCheckMs_ = 0;
+
+    // How often refresh() re-checks that our target survived. The parts reset every register on a
+    // watchdog expiry, which lands tens of seconds after a valid input appears.
+    static constexpr uint32_t CHARGE_VOLTAGE_RECHECK_MS = 10 * 1000;
+
+    /// Re-assert the programmed target if a register reset wiped it. Called only from refresh().
+    void reapplyAfterRegisterReset();
 
     bool readReg(uint8_t reg, uint8_t &value);
     bool writeReg(uint8_t reg, uint8_t value);

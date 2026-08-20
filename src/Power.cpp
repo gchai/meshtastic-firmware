@@ -1741,6 +1741,11 @@ bool Power::cw2015Init()
 #define BQ27220_INIT_ATTEMPTS 3
 #define BQ27220_RETRY_INTERVAL_MS (60 * 1000)
 
+// The charging target these boards have shipped with: 80mV above the BQ25896's own 4.208V reset
+// default. Pre-existing on all four HAS_PPM boards, so it stays bit-for-bit until its provenance is
+// settled - it may be a VINDPM workaround rather than a chemistry decision.
+static constexpr uint16_t BQ25896_BOARD_DEFAULT_TARGET_MV = 4288;
+
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
  *
@@ -1783,15 +1788,16 @@ class LipoCharger : public HasBatteryLevel
                 // Disable current limit pin
                 // PPM->disableCurrentLimitPin();
 
-                // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-                PPM->setChargeTargetVoltage(4288);
+                // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV. The library
+                // rejects anything that is not a multiple of the step, writing nothing.
+                PPM->setChargeTargetVoltage(BQ25896_BOARD_DEFAULT_TARGET_MV);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
                 // PPM->setPrechargeCurr(64);
 
                 // The premise is that limit pin is disabled, or it will
                 // only follow the maximum charging current set by limit pin.
-                // Set the charging current , Range:0~5056mA ,step:64mA
+                // Set the charging current , Range:0~3008mA ,step:64mA
                 PPM->setChargerConstantCurr(1024);
 
                 // To obtain voltage data, the ADC must be enabled first
